@@ -16,6 +16,8 @@ import ReviewsSection from "@/components/ReviewsSection";
 import GalleryCarousel from "@/components/GalleryCarousel";
 import { WHATSAPP_URL } from "@/constants/contact";
 import heroImage from "@/assets/hero-editorial.jpg";
+import heroVideo from "@/assets/hero-bg.mp4";
+import heroPoster from "@/assets/hero-poster.jpg";
 import trainingImg from "@/assets/training-calm.jpg";
 import muayThaiImg from "@/assets/istockphoto-1620896814-612x612.jpg";
 import glovesImg from "@/assets/gloves-detail.jpg";
@@ -55,12 +57,43 @@ const Index = () => {
       <Header />
 
       {/* Hero Section */}
-      <section className="relative min-h-[90vh] flex items-start overflow-hidden pt-32 md:pt-40">
-        <div
-          className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-          style={{ backgroundImage: `url(${heroImage})` }}
+      <section className="relative h-[90vh] flex items-start overflow-hidden pt-32 md:pt-40">
+        {/* Backdrop: same video heavily blurred to fill everything */}
+        <video
+          className="absolute inset-0 object-cover"
+          style={{ width: "100%", height: "100%", transform: "scale(1.4)", filter: "blur(50px) brightness(0.65) saturate(0.8)" }}
+          src={heroVideo}
+          poster={heroPoster}
+          autoPlay
+          muted
+          loop
+          playsInline
+          preload="auto"
+          aria-hidden="true"
         />
-        <div className="absolute inset-0 bg-gradient-to-b from-background/80 via-background/60 to-background" />
+        {/* Sharp video: natural portrait aspect, anchored to the right, scaled 20% larger, red glow on visible edge */}
+        <video
+          className="absolute inset-0 object-contain object-right"
+          style={{
+            width: "100%",
+            height: "100%",
+            transform: "scale(1.2)",
+            transformOrigin: "right center",
+            filter: "drop-shadow(0 0 30px rgba(220, 38, 38, 0.45)) drop-shadow(0 0 60px rgba(220, 38, 38, 0.2))",
+          }}
+          src={heroVideo}
+          poster={heroPoster}
+          autoPlay
+          muted
+          loop
+          playsInline
+          preload="auto"
+          aria-hidden="true"
+        />
+        {/* Left → right darkening overlay for text legibility */}
+        <div className="absolute inset-0 bg-gradient-to-r from-background via-background/70 to-background/30" />
+        {/* Bottom vignette so seam to next section is soft */}
+        <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-background to-transparent pointer-events-none" />
         <OctagonFrame
           className="absolute top-20 right-10 w-64 h-64 opacity-10 rotate-12"
           strokeWidth={0.5}

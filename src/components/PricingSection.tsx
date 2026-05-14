@@ -4,14 +4,9 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Loader2 } from "lucide-react";
 import { useYogoPricing, type PricingItem, type PriceGroup } from "@/hooks/useYogoPricing";
 
-/** Round up to the nearest 5€ to show a clean "before" price (+15%) */
-function fakeOriginal(price: number): number {
-  return Math.ceil((price * 1.15) / 5) * 5;
-}
-
 function isMostPopular(item: PricingItem): boolean {
-  const n = item.name.toLowerCase();
-  return n.includes("most popular") || n.includes("every day") || item.paymentOptions.length > 1;
+  const haystack = `${item.name} ${item.description ?? ""}`.toLowerCase();
+  return haystack.includes("most popular");
 }
 
 function getMonthlyPrice(item: PricingItem): number | null {
@@ -65,11 +60,6 @@ function PricingCard({ item }: { item: PricingItem }) {
         <div className="mb-5">
           {!hasMultipleOptions ? (
             <>
-              <div className="flex items-baseline justify-center gap-2">
-                <span className={`text-sm line-through ${popular ? "text-gray-400" : "text-white/40"}`}>
-                  {fakeOriginal(displayPrice)}€
-                </span>
-              </div>
               <span className={`text-5xl font-bold ${popular ? "text-black" : "text-white"}`}>
                 {displayPrice}€
               </span>
@@ -82,27 +72,23 @@ function PricingCard({ item }: { item: PricingItem }) {
           ) : (
             <>
               {monthlyPrice && (
-                <>
-                  <div className="flex items-baseline justify-center gap-2">
-                    <span className={`text-sm line-through ${popular ? "text-gray-400" : "text-white/40"}`}>
-                      {fakeOriginal(monthlyPrice)}€
-                    </span>
-                  </div>
-                  <span className={`text-5xl font-bold ${popular ? "text-black" : "text-white"}`}>
-                    {monthlyPrice}€
-                  </span>
-                </>
+                <span className={`text-5xl font-bold ${popular ? "text-black" : "text-white"}`}>
+                  {monthlyPrice}€
+                </span>
               )}
             </>
           )}
         </div>
 
-        {/* Description */}
-        {item.description && (
-          <p className={`text-sm whitespace-pre-line ${popular ? "text-gray-500" : "text-white/50"}`}>
-            {item.description}
-          </p>
-        )}
+        {/* Description (strip the "*Most Popular" marker since the badge already shows it) */}
+        {item.description && (() => {
+          const cleaned = item.description.replace(/\*?\s*most popular\s*/gi, "").trim();
+          return cleaned ? (
+            <p className={`text-sm whitespace-pre-line ${popular ? "text-gray-500" : "text-white/50"}`}>
+              {cleaned}
+            </p>
+          ) : null;
+        })()}
 
         {/* Registration fee */}
         {item.registrationFee > 0 && (
@@ -144,12 +130,7 @@ function PricingCard({ item }: { item: PricingItem }) {
                 }`}
               >
                 <span>{opt.name}</span>
-                <span className="font-semibold">
-                  <span className={`line-through text-xs mr-1.5 font-normal ${popular ? "text-gray-400" : "text-white/40"}`}>
-                    {fakeOriginal(opt.price)}€
-                  </span>
-                  {opt.price}€
-                </span>
+                <span className="font-semibold">{opt.price}€</span>
               </a>
             ))}
           </div>

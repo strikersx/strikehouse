@@ -123,15 +123,27 @@
     "ctaEmail": "Enviar Email"
   },
   "whyDifferent": {
-    "subtitle": "A Nossa Abordagem",
-    "title": "Porque é que a Striker's House é Diferente",
-    "description1": "Aqui, competição e crescimento pessoal partilham o mesmo espaço.",
-    "description1a": "Atletas preparam-se para competir.",
-    "description1b": "Outros vêm para se tornarem mais fortes — física e mentalmente.",
-    "highlight": "Caminhos diferentes. Uma disciplina.",
-    "description2": "Não separamos pessoas por ego, idade ou origem.",
-    "description2a": "Unimo-las através de estrutura, respeito e consistência.",
-    "closing": "Porque a verdadeira força constrói-se com o tempo."
+    "subtitle": "Porque é diferente",
+    "line1": "Ginásio de combate",
+    "line2": "não tem que ser",
+    "lineStrike": "uma cave escura",
+    "p1": "A Striker's House nasceu com outra ideia. Um espaço com luz, com respeito, com pessoas que se cumprimentam pelo nome.",
+    "p2Lead": "Para todos.",
+    "p2": "Miúdos, seniores, mães que nunca treinaram, executivos, atletas a preparar competição, mulheres em aulas só para mulheres.",
+    "p3Lead": "Diversão primeiro.",
+    "p3": "A disciplina vem naturalmente quando o treino deixa de ser um castigo.",
+    "ctaPrimary": "EXPERIMENTA GRÁTIS",
+    "ctaSecondary": "AULAS SÓ MULHERES",
+    "socialProof": "PROVA SOCIAL",
+    "rating": "5.0★ · 120+ reviews",
+    "quote": "Ambiente onde me sinto em casa desde o dia 1",
+    "imageAlt": "Comunidade Striker's House",
+    "tags": {
+      "women": "Mulheres",
+      "kids": "Kids 6+",
+      "seniors": "55+",
+      "beginners": "Iniciantes"
+    }
   },
   "kids": {
     "subtitle": "Programa Infantil",

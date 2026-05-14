@@ -123,15 +123,27 @@
     "ctaEmail": "Send Email"
   },
   "whyDifferent": {
-    "subtitle": "Our Approach",
-    "title": "Why Striker's House is Different",
-    "description1": "Here, competition and personal growth share the same floor.",
-    "description1a": "Athletes prepare to compete.",
-    "description1b": "Others come to become stronger — physically and mentally.",
-    "highlight": "Different paths. One discipline.",
-    "description2": "We don't separate people by ego, age or background.",
-    "description2a": "We bring them together through structure, respect and consistency.",
-    "closing": "Because real strength is built over time."
+    "subtitle": "Why we're different",
+    "line1": "A fight gym",
+    "line2": "doesn't have to be",
+    "lineStrike": "a dark basement",
+    "p1": "Striker's House was born from another idea. A space with light, with respect, with people who greet each other by name.",
+    "p2Lead": "For everyone.",
+    "p2": "Kids, seniors, moms who've never trained, executives, athletes preparing for competition, women in women-only classes.",
+    "p3Lead": "Fun first.",
+    "p3": "Discipline comes naturally when training stops feeling like a punishment.",
+    "ctaPrimary": "FREE TRIAL",
+    "ctaSecondary": "WOMEN-ONLY CLASSES",
+    "socialProof": "SOCIAL PROOF",
+    "rating": "5.0★ · 120+ reviews",
+    "quote": "An environment where I've felt at home since day 1",
+    "imageAlt": "Striker's House community",
+    "tags": {
+      "women": "Women",
+      "kids": "Kids 6+",
+      "seniors": "55+",
+      "beginners": "Beginners"
+    }
   },
   "kids": {
     "subtitle": "Kids Program",
