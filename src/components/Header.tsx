@@ -149,7 +149,7 @@ const Header = () => {
               <SmartLink
                 href={isHomePage ? "#horario" : "/#horario"}
                 isAnchor={isHomePage}
-                className="hidden xl:inline-flex px-5 py-2 border border-foreground/30 rounded-full text-[10px] uppercase tracking-[0.15em] text-foreground hover:border-foreground hover:bg-foreground/5 transition-colors"
+                className="hidden xl:inline-flex px-5 py-2 border border-foreground/30 rounded-full text-[10px] uppercase tracking-[0.15em] text-foreground hover:border-accent hover:text-accent transition-colors"
               >
                 {t('header.bookNow')}
               </SmartLink>
@@ -158,7 +158,7 @@ const Header = () => {
               <SmartLink
                 href={isHomePage ? "#planos" : "/#planos"}
                 isAnchor={isHomePage}
-                className="hidden xl:inline-flex px-5 py-2 border border-foreground/30 rounded-full text-[10px] uppercase tracking-[0.15em] text-foreground hover:border-foreground hover:bg-foreground/5 transition-colors"
+                className="hidden xl:inline-flex px-5 py-2 border border-foreground/30 rounded-full text-[10px] uppercase tracking-[0.15em] text-foreground hover:border-accent hover:text-accent transition-colors"
               >
                 {t('header.buySessions')}
               </SmartLink>
@@ -167,7 +167,7 @@ const Header = () => {
               <SmartLink
                 href={isHomePage ? "#try-now" : "/#try-now"}
                 isAnchor={isHomePage}
-                className="px-5 py-2 bg-foreground text-background rounded-full text-[10px] uppercase tracking-[0.15em] font-medium hover:bg-foreground/90 transition-colors"
+                className="px-5 py-2 bg-foreground text-background rounded-full text-[10px] uppercase tracking-[0.15em] font-medium hover:bg-accent hover:text-accent-foreground transition-colors"
               >
                 {t('header.tryNow')}
               </SmartLink>
@@ -282,7 +282,7 @@ const Header = () => {
                   href={isHomePage ? "#horario" : "/#horario"}
                   isAnchor={isHomePage}
                   onClick={handleLinkClick}
-                  className="px-8 py-3 border border-white/30 rounded-full text-white text-xs uppercase tracking-[0.15em] hover:border-white transition-colors text-center w-64"
+                  className="px-8 py-3 border border-white/30 rounded-full text-white text-xs uppercase tracking-[0.15em] hover:border-accent hover:text-accent transition-colors text-center w-64"
                 >
                   {t('header.bookNow')}
                 </SmartLink>
@@ -290,7 +290,7 @@ const Header = () => {
                   href={isHomePage ? "#planos" : "/#planos"}
                   isAnchor={isHomePage}
                   onClick={handleLinkClick}
-                  className="px-8 py-3 border border-white/30 rounded-full text-white text-xs uppercase tracking-[0.15em] hover:border-white transition-colors text-center w-64"
+                  className="px-8 py-3 border border-white/30 rounded-full text-white text-xs uppercase tracking-[0.15em] hover:border-accent hover:text-accent transition-colors text-center w-64"
                 >
                   {t('header.buySessions')}
                 </SmartLink>
@@ -298,7 +298,7 @@ const Header = () => {
                   href={isHomePage ? "#try-now" : "/#try-now"}
                   isAnchor={isHomePage}
                   onClick={handleLinkClick}
-                  className="px-8 py-3 bg-white text-background rounded-full text-xs uppercase tracking-[0.15em] font-medium hover:bg-white/90 transition-colors text-center w-64"
+                  className="px-8 py-3 bg-white text-background rounded-full text-xs uppercase tracking-[0.15em] font-medium hover:bg-accent hover:text-accent-foreground transition-colors text-center w-64"
                 >
                   {t('header.tryNow')}
                 </SmartLink>

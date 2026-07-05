@@ -85,7 +85,7 @@ const WhyDifferent = () => {
             <Button
               size="lg"
               variant="outline"
-              className="rounded-full text-sm tracking-[0.1em] font-semibold border-black text-black hover:bg-black hover:text-white"
+              className="rounded-full text-sm tracking-[0.1em] font-semibold border-black text-black hover:border-accent hover:bg-accent hover:text-accent-foreground"
               onClick={scrollToBookNow}
             >
               {t("whyDifferent.ctaSecondary", "AULAS SÓ MULHERES")}

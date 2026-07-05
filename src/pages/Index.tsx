@@ -115,7 +115,7 @@ const Index = () => {
               {t("membership.page.heroDescription")}
             </p>
             <div className="flex flex-col sm:flex-row gap-4">
-              <Button size="lg" className="text-base px-8 rounded-full" onClick={scrollToTryNow}>
+              <Button size="lg" className="text-base px-8 rounded-full hover:bg-accent hover:text-accent-foreground" onClick={scrollToTryNow}>
                 {t("membership.page.trialCta")}
               </Button>
               <Button
@@ -253,7 +253,7 @@ const Index = () => {
                 </p>
                 <a
                   href="#faq-chat"
-                  className="inline-block px-5 py-2.5 bg-black text-white rounded-full text-xs font-semibold uppercase tracking-wider hover:bg-gray-800 transition-colors"
+                  className="inline-block px-5 py-2.5 bg-black text-white rounded-full text-xs font-semibold uppercase tracking-wider hover:bg-accent transition-colors"
                 >
                   {t("welcome.ctaExpect")}
                 </a>
@@ -321,10 +321,10 @@ const Index = () => {
               {t("membership.page.finalCtaDescription")}
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <Button size="lg" className="px-8 rounded-full" onClick={scrollToTryNow}>
+              <Button size="lg" className="px-8 rounded-full hover:bg-accent hover:text-accent-foreground" onClick={scrollToTryNow}>
                 {t("membership.page.freeClass")}
               </Button>
-              <Button size="lg" variant="outline" className="px-8 rounded-full" asChild>
+              <Button size="lg" variant="outline" className="px-8 rounded-full hover:border-accent hover:text-accent hover:bg-transparent" asChild>
                 <a
                   href={WHATSAPP_URL}
                   target="_blank"
