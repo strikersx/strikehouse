@@ -9,24 +9,61 @@ function isMostPopular(item: PricingItem): boolean {
   return haystack.includes("most popular");
 }
 
-function getMonthlyPrice(item: PricingItem): number | null {
-  if (item.type !== "membership") return null;
-  const monthly = item.paymentOptions.find(
-    (o) => o.name.toLowerCase().includes("mensal") || o.name.toLowerCase().includes("1 month")
-  );
-  return monthly?.price ?? item.paymentOptions[0]?.price ?? null;
+// Short category label derived from plan shape. Rendered on every card so the
+// card tops stay aligned across the row (popular badge floats above, in-flow).
+function eyebrowLabel(item: PricingItem): string {
+  if (item.type === "class_pass") {
+    return item.numberOfClasses ? `${item.numberOfClasses} passes` : "Pacote de aulas";
+  }
+  if (item.isUnlimited) return "Ilimitado";
+  if (item.classesPerWeek) return `${item.classesPerWeek}× por semana`;
+  if (item.classesPerMonth) return `${item.classesPerMonth} passes`;
+  return "Plano";
+}
+
+function periodLabel(item: PricingItem): string {
+  if (item.type === "class_pass") {
+    return item.numberOfClasses ? `/ ${item.numberOfClasses} aulas` : "";
+  }
+  return "/ mês";
+}
+
+// Data-driven, scannable bullets — matches the red-dash list aesthetic.
+function featureBullets(item: PricingItem, mainPrice: number): string[] {
+  const out: string[] = [];
+  if (item.type === "class_pass") {
+    if (item.numberOfClasses) out.push(`${item.numberOfClasses} aulas`);
+    if (item.validDays) out.push(`Válido ${item.validDays} dias`);
+  } else if (item.isUnlimited) {
+    out.push("Aulas ilimitadas");
+  } else if (item.classesPerWeek) {
+    out.push(`${item.classesPerWeek} aulas / semana`);
+  } else if (item.classesPerMonth) {
+    out.push(`${item.classesPerMonth} aulas / mês`);
+  }
+  if (item.registrationFee > 0) out.push(`Inscrição: ${item.registrationFee}€`);
+  const sessions = item.classesPerMonth ?? (item.classesPerWeek ? item.classesPerWeek * 4 : null);
+  if (mainPrice && sessions) {
+    const pps = (mainPrice / sessions).toFixed(2).replace(".", ",");
+    out.push(`≈ ${pps}€ por aula`);
+  }
+  return out;
 }
 
 function PricingCard({ item }: { item: PricingItem }) {
   const { t } = useTranslation();
-  const hasMultipleOptions = item.paymentOptions.length > 1;
   const popular = isMostPopular(item);
-  const monthlyPrice = getMonthlyPrice(item);
-  const sessionsPerMonth = item.classesPerMonth ?? (item.classesPerWeek ? item.classesPerWeek * 4 : null);
-  const pricePerSession = monthlyPrice && sessionsPerMonth ? (monthlyPrice / sessionsPerMonth).toFixed(2) : null;
+  const hasMultipleOptions = item.paymentOptions.length > 1;
+  const main = item.paymentOptions[0]; // cheapest (sorted ascending)
+  const mainPrice = main?.price ?? 0;
 
-  // For display: use the first (cheapest) option price for single-option cards
-  const displayPrice = item.paymentOptions[0]?.price ?? 0;
+  const subtitle = item.description.replace(/\*?\s*most popular\s*/gi, "").trim();
+  const bullets = featureBullets(item, mainPrice);
+
+  const cardBase = "relative flex flex-col rounded-[2rem] border p-8 transition-all duration-500";
+  const cardLook = popular
+    ? "border-accent/70 bg-gradient-to-br from-accent/15 via-card to-card shadow-[0_30px_80px_-30px_hsl(var(--accent))] z-10"
+    : "border-border/60 bg-card shadow-[0_30px_80px_-40px_rgba(0,0,0,0.6)] hover:border-foreground/30";
 
   return (
     <motion.div
@@ -35,89 +72,65 @@ function PricingCard({ item }: { item: PricingItem }) {
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -10 }}
       transition={{ duration: 0.3 }}
-      className={`relative rounded-2xl flex flex-col overflow-hidden transition-all duration-300 ${
-        popular
-          ? "bg-white text-black border-2 border-white shadow-[0_0_30px_rgba(255,255,255,0.3),0_0_60px_rgba(255,255,255,0.15)] z-10"
-          : "bg-white/[0.07] backdrop-blur-sm text-white border border-white/10"
-      }`}
+      className={`${cardBase} ${cardLook}`}
     >
-      {/* Most Popular badge — slot reserved on every card so titles align */}
-      <div className="flex justify-center pt-5">
-        <span
-          className={`text-xs font-semibold uppercase tracking-wider px-4 py-1.5 rounded-full ${
-            popular ? "bg-gray-900 text-white" : "opacity-0 pointer-events-none"
-          }`}
-        >
+      {/* Popular badge — floats above, doesn't affect in-flow alignment */}
+      {popular && (
+        <span className="absolute -top-3 left-8 rounded-full bg-accent px-4 py-1 font-mono text-[10px] uppercase tracking-[0.22em] text-accent-foreground shadow-[0_8px_24px_-8px_hsl(var(--accent))]">
           {t("pricing.mostPopular")}
         </span>
+      )}
+
+      <div className="mb-4 font-mono text-[10px] uppercase tracking-[0.22em] text-muted-foreground">
+        {eyebrowLabel(item)}
       </div>
 
-      <div className="p-8 pb-6 flex flex-col flex-1 items-center text-center">
-        {/* Name */}
-        <h3 className={`text-2xl font-bold mb-4 ${popular ? "text-black" : "text-white"}`}>
-          {item.name.replace(/⭐/g, "").replace(/- Most Popular/i, "").trim()}
-        </h3>
+      <h3 className="text-3xl font-semibold tracking-wider text-foreground">
+        {item.name.replace(/⭐/g, "").replace(/- Most Popular/i, "").trim()}
+      </h3>
 
-        {/* Price */}
-        <div className="mb-5">
-          {!hasMultipleOptions ? (
-            <>
-              <span className={`text-5xl font-bold ${popular ? "text-black" : "text-white"}`}>
-                {displayPrice}€
-              </span>
-              {item.type === "class_pass" && (
-                <span className={`text-sm ml-1 ${popular ? "text-gray-500" : "text-white/50"}`}>
-                  /{item.numberOfClasses} {t("pricing.classes")}
-                </span>
-              )}
-            </>
-          ) : (
-            <>
-              {monthlyPrice && (
-                <span className={`text-5xl font-bold ${popular ? "text-black" : "text-white"}`}>
-                  {monthlyPrice}€
-                </span>
-              )}
-            </>
-          )}
-        </div>
+      {subtitle && (
+        <p className="mt-3 text-sm text-muted-foreground whitespace-pre-line">{subtitle}</p>
+      )}
 
-        {/* Description (strip the "*Most Popular" marker since the badge already shows it) */}
-        {item.description && (() => {
-          const cleaned = item.description.replace(/\*?\s*most popular\s*/gi, "").trim();
-          return cleaned ? (
-            <p className={`text-sm whitespace-pre-line ${popular ? "text-gray-500" : "text-white/50"}`}>
-              {cleaned}
-            </p>
-          ) : null;
-        })()}
+      {/* Price */}
+      <div className="mt-8 flex items-baseline gap-2">
+        <span className="font-mono text-sm text-muted-foreground">€</span>
+        <span className="text-6xl font-semibold tracking-tight text-foreground">{mainPrice}</span>
+        <span className="font-mono text-sm text-muted-foreground">{periodLabel(item)}</span>
+      </div>
 
-        {/* Registration fee */}
-        {item.registrationFee > 0 && (
-          <p className={`text-xs mt-2 ${popular ? "text-gray-400" : "text-white/40"}`}>
-            + {t("pricing.registrationFee")}: {item.registrationFee}€
-          </p>
-        )}
+      {/* Feature bullets */}
+      {bullets.length > 0 && (
+        <ul className="mt-8 space-y-3 border-t border-border/60 pt-6">
+          {bullets.map((b, i) => (
+            <li key={i} className="flex items-start gap-3 text-sm text-muted-foreground">
+              <span className="mt-[0.6em] h-px w-4 shrink-0 bg-accent" />
+              <span className="text-foreground/90">{b}</span>
+            </li>
+          ))}
+        </ul>
+      )}
 
-        <div className="flex-1" />
-
-        {/* CTA */}
+      {/* CTA */}
+      <div className="mt-auto pt-8 w-full">
         {!hasMultipleOptions ? (
           <a
-            href={item.paymentOptions[0].purchaseUrl}
+            href={main.purchaseUrl}
             target="_blank"
             rel="noopener noreferrer"
             data-yogo-parsed="true"
-            className={`mt-6 block w-full text-center py-3 rounded-full text-sm font-semibold uppercase tracking-wider transition-all ${
+            className={`flex items-center justify-between gap-4 rounded-full px-6 py-4 font-mono text-xs uppercase tracking-[0.22em] transition-all ${
               popular
-                ? "bg-gray-900 text-white hover:bg-black"
-                : "bg-transparent border border-white/30 text-white hover:bg-white/10"
+                ? "bg-accent text-accent-foreground shadow-[0_12px_28px_-10px_hsl(var(--accent))] hover:opacity-90"
+                : "border border-border/60 text-foreground hover:border-accent hover:text-accent"
             }`}
           >
-            {t("pricing.buy")}
+            <span>{t("pricing.buy")}</span>
+            <span aria-hidden>→</span>
           </a>
         ) : (
-          <div className="mt-6 w-full space-y-2">
+          <div className="space-y-2">
             {item.paymentOptions.map((opt) => (
               <a
                 key={opt.id}
@@ -125,13 +138,13 @@ function PricingCard({ item }: { item: PricingItem }) {
                 target="_blank"
                 rel="noopener noreferrer"
                 data-yogo-parsed="true"
-                className={`flex items-center justify-between w-full px-5 py-2.5 rounded-full text-sm transition-all ${
+                className={`flex items-center justify-between gap-4 rounded-full px-5 py-3 text-sm transition-all ${
                   popular
-                    ? "border border-gray-200 text-black hover:border-gray-900 hover:bg-gray-50"
-                    : "border border-white/20 text-white hover:border-white/50 hover:bg-white/5"
+                    ? "border border-accent/60 text-foreground hover:bg-accent/10"
+                    : "border border-border/60 text-foreground hover:border-accent hover:text-accent"
                 }`}
               >
-                <span>{opt.name}</span>
+                <span className="uppercase tracking-wider">{opt.name || t("pricing.buy")}</span>
                 <span className="font-semibold">{opt.price}€</span>
               </a>
             ))}
@@ -159,8 +172,8 @@ function GroupTabs({
           onClick={() => onSelect(group.id)}
           className={`px-5 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-colors ${
             activeId === group.id
-              ? "bg-white text-black shadow-sm"
-              : "bg-white/10 text-white/70 hover:bg-white/20"
+              ? "bg-foreground text-background"
+              : "border border-border/60 text-muted-foreground hover:border-foreground/40 hover:text-foreground"
           }`}
         >
           {group.name}
@@ -182,7 +195,7 @@ export default function PricingSection() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-20">
-        <Loader2 className="w-8 h-8 animate-spin text-red-600" />
+        <Loader2 className="w-8 h-8 animate-spin text-accent" />
       </div>
     );
   }
@@ -214,7 +227,7 @@ export default function PricingSection() {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
             transition={{ duration: 0.25 }}
-            className={`grid gap-4 items-stretch ${
+            className={`grid gap-6 items-stretch ${
               activeGroup.items.length === 1
                 ? "grid-cols-1 max-w-sm mx-auto"
                 : activeGroup.items.length === 2
@@ -232,7 +245,7 @@ export default function PricingSection() {
       </AnimatePresence>
 
       {/* Klarna note */}
-      <p className="text-center text-sm text-white/40 mt-8">
+      <p className="text-center text-sm text-muted-foreground mt-8">
         {t("pricing.noContracts")}
       </p>
     </motion.div>
