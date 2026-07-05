@@ -23,7 +23,9 @@ function eyebrowLabel(item: PricingItem): string {
 
 function periodLabel(item: PricingItem): string {
   if (item.type === "class_pass") {
-    return item.numberOfClasses ? `/ ${item.numberOfClasses} aulas` : "";
+    return item.numberOfClasses
+      ? `/ ${item.numberOfClasses} ${item.numberOfClasses === 1 ? "aula" : "aulas"}`
+      : "";
   }
   return "/ mês";
 }
@@ -32,7 +34,8 @@ function periodLabel(item: PricingItem): string {
 function featureBullets(item: PricingItem, mainPrice: number): string[] {
   const out: string[] = [];
   if (item.type === "class_pass") {
-    if (item.numberOfClasses) out.push(`${item.numberOfClasses} aulas`);
+    if (item.numberOfClasses)
+      out.push(`${item.numberOfClasses} ${item.numberOfClasses === 1 ? "aula" : "aulas"}`);
     if (item.validDays) out.push(`Válido ${item.validDays} dias`);
   } else if (item.isUnlimited) {
     out.push("Aulas ilimitadas");
@@ -56,14 +59,19 @@ function PricingCard({ item }: { item: PricingItem }) {
   const hasMultipleOptions = item.paymentOptions.length > 1;
   const main = item.paymentOptions[0]; // cheapest (sorted ascending)
   const mainPrice = main?.price ?? 0;
+  const trial = !popular && mainPrice === 0; // free-trial card (e.g. Experimental)
 
   const subtitle = item.description.replace(/\*?\s*most popular\s*/gi, "").trim();
-  const bullets = featureBullets(item, mainPrice);
+  const bullets = trial
+    ? ["Sem compromisso", ...featureBullets(item, mainPrice)]
+    : featureBullets(item, mainPrice);
 
   const cardBase = "relative flex flex-col rounded-[2rem] border p-8 transition-all duration-500";
   const cardLook = popular
     ? "border-accent/70 bg-gradient-to-br from-accent/15 via-card to-card shadow-[0_30px_80px_-30px_hsl(var(--accent))] z-10"
-    : "border-border/60 bg-card shadow-[0_30px_80px_-40px_rgba(0,0,0,0.6)] hover:border-foreground/30";
+    : trial
+      ? "border-2 border-dashed border-accent bg-card shadow-[0_30px_80px_-40px_rgba(0,0,0,0.6)] hover:border-solid"
+      : "border-border/60 bg-card shadow-[0_30px_80px_-40px_rgba(0,0,0,0.6)] hover:border-foreground/30";
 
   return (
     <motion.div
@@ -74,12 +82,16 @@ function PricingCard({ item }: { item: PricingItem }) {
       transition={{ duration: 0.3 }}
       className={`${cardBase} ${cardLook}`}
     >
-      {/* Popular badge — floats above, doesn't affect in-flow alignment */}
-      {popular && (
+      {/* Highlight badge — floats above, doesn't affect in-flow alignment */}
+      {popular ? (
         <span className="absolute -top-3 left-8 rounded-full bg-accent px-4 py-1 font-mono text-[10px] uppercase tracking-[0.22em] text-accent-foreground shadow-[0_8px_24px_-8px_hsl(var(--accent))]">
           {t("pricing.mostPopular")}
         </span>
-      )}
+      ) : trial ? (
+        <span className="absolute -top-3 left-8 rounded-full bg-foreground px-4 py-1 font-mono text-[10px] uppercase tracking-[0.22em] text-background shadow-[0_8px_24px_-8px_rgba(0,0,0,0.6)]">
+          Grátis
+        </span>
+      ) : null}
 
       <div className="mb-4 font-mono text-[10px] uppercase tracking-[0.22em] text-muted-foreground">
         {eyebrowLabel(item)}
@@ -95,9 +107,18 @@ function PricingCard({ item }: { item: PricingItem }) {
 
       {/* Price */}
       <div className="mt-8 flex items-baseline gap-2">
-        <span className="font-mono text-sm text-muted-foreground">€</span>
-        <span className="text-6xl font-semibold tracking-tight text-foreground">{mainPrice}</span>
-        <span className="font-mono text-sm text-muted-foreground">{periodLabel(item)}</span>
+        {trial ? (
+          <>
+            <span className="text-5xl font-semibold tracking-tight text-foreground">Grátis</span>
+            <span className="font-mono text-sm text-muted-foreground">{periodLabel(item)}</span>
+          </>
+        ) : (
+          <>
+            <span className="font-mono text-sm text-muted-foreground">€</span>
+            <span className="text-6xl font-semibold tracking-tight text-foreground">{mainPrice}</span>
+            <span className="font-mono text-sm text-muted-foreground">{periodLabel(item)}</span>
+          </>
+        )}
       </div>
 
       {/* Feature bullets */}
@@ -123,10 +144,12 @@ function PricingCard({ item }: { item: PricingItem }) {
             className={`flex items-center justify-between gap-4 rounded-full px-6 py-4 font-mono text-xs uppercase tracking-[0.22em] transition-all ${
               popular
                 ? "bg-accent text-accent-foreground shadow-[0_12px_28px_-10px_hsl(var(--accent))] hover:opacity-90"
-                : "border border-border/60 text-foreground hover:border-accent hover:text-accent"
+                : trial
+                  ? "bg-foreground text-background hover:opacity-90"
+                  : "border border-border/60 text-foreground hover:border-accent hover:text-accent"
             }`}
           >
-            <span>{t("pricing.buy")}</span>
+            <span>{trial ? "Experimentar" : t("pricing.buy")}</span>
             <span aria-hidden>→</span>
           </a>
         ) : (
