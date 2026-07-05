@@ -37,18 +37,20 @@ function PricingCard({ item }: { item: PricingItem }) {
       transition={{ duration: 0.3 }}
       className={`relative rounded-2xl flex flex-col overflow-hidden transition-all duration-300 ${
         popular
-          ? "bg-white text-black border-2 border-white shadow-[0_0_30px_rgba(255,255,255,0.3),0_0_60px_rgba(255,255,255,0.15)] scale-105 z-10"
+          ? "bg-white text-black border-2 border-white shadow-[0_0_30px_rgba(255,255,255,0.3),0_0_60px_rgba(255,255,255,0.15)] z-10"
           : "bg-white/[0.07] backdrop-blur-sm text-white border border-white/10"
       }`}
     >
-      {/* Most Popular badge */}
-      {popular && (
-        <div className="flex justify-center pt-5">
-          <span className="bg-gray-900 text-white text-xs font-semibold uppercase tracking-wider px-4 py-1.5 rounded-full">
-            {t("pricing.mostPopular")}
-          </span>
-        </div>
-      )}
+      {/* Most Popular badge — slot reserved on every card so titles align */}
+      <div className="flex justify-center pt-5">
+        <span
+          className={`text-xs font-semibold uppercase tracking-wider px-4 py-1.5 rounded-full ${
+            popular ? "bg-gray-900 text-white" : "opacity-0 pointer-events-none"
+          }`}
+        >
+          {t("pricing.mostPopular")}
+        </span>
+      </div>
 
       <div className="p-8 pb-6 flex flex-col flex-1 items-center text-center">
         {/* Name */}
@@ -212,7 +214,7 @@ export default function PricingSection() {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
             transition={{ duration: 0.25 }}
-            className={`grid gap-4 items-center ${
+            className={`grid gap-4 items-stretch ${
               activeGroup.items.length === 1
                 ? "grid-cols-1 max-w-sm mx-auto"
                 : activeGroup.items.length === 2
