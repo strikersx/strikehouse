@@ -1,0 +1,29 @@
+# .claude/project.yml — COMMITTED. Arma os gates do development-workflow para quem clonar.
+# Valores detectados do repo (Makefile, package.json, git remote), nao inventados.
+
+github:
+  repo: strikersx/strikehouse
+
+tests:
+  # Alvos do Makefile — CLAUDE.md manda usar make, nao npm run directo.
+  unit: "make test"
+  lint: "make lint"
+  # Sem alvo no Makefile; tsconfig.app.json existe e tsc esta nas devDependencies.
+  typecheck: "npx tsc --noEmit"
+  # ATENCAO: e2e sobe `npm run dev` em :8080, que le o .env e escreve na Supabase
+  # HOSPEDADA (cgdshqmqsqwgwpjfmesr). Ate o isolamento de BD por worktree existir,
+  # satisfaz [R11] com `receipt.sh test --scope` e a razao registada.
+  e2e: "npm run test:e2e"
+  # vitest filtra por padrao nu.
+  scoped: "npx vitest run --config vitest.config.ts {scope}"
+
+worktree:
+  base: main
+  isolate: "true"
+  # Vite e Playwright estao presos a :8080; cada worktree precisa da sua porta.
+  port_base: 8080
+  # .env e DERIVADO: reescrito a partir do main a cada entrada, para que um worktree
+  # nao envelheca contra o pai nem escreva no .env dos outros.
+  env_rewrite: .env
+  # worktree.provision fica DELIBERADAMENTE por declarar: o script de Supabase local
+  # por worktree ainda nao existe. Declara-lo agora seria apontar para um fantasma.
