@@ -146,14 +146,22 @@ rewrite_env() {
 
   tmp="$(mktemp)"
   # Preserva tudo o que nao e' Supabase (STRIPE_*, GITHUB_CI_TOKEN, ...) a partir do main.
-  grep -vE '^(VITE_SUPABASE_URL|VITE_SUPABASE_PUBLISHABLE_KEY|SUPABASE_SERVICE_ROLE_KEY)=' "$src" > "$tmp"
+  # `|| true` nao e' decoracao: com `set -e`, um grep -v que nao deixa NENHUMA linha
+  # devolve 1 e mata o script em silencio — exit 1, stderr vazio. Acontece a qualquer
+  # .env que so' tenha chaves Supabase. Apanhado pelo teste de idempotencia.
+  grep -vE '^(VITE_SUPABASE_URL|VITE_SUPABASE_PUBLISHABLE_KEY|SUPABASE_SERVICE_ROLE_KEY)=' "$src" > "$tmp" || true
   {
     printf '\n# --- reescrito por supabase-worktree.sh: stack local deste worktree ---\n'
     printf 'VITE_SUPABASE_URL="%s"\n' "$api"
     printf 'VITE_SUPABASE_PUBLISHABLE_KEY="%s"\n' "$key"
     printf 'SUPABASE_SERVICE_ROLE_KEY="%s"\n' "$svc"
   } >> "$tmp"
-  rm -f "$dst"          # PARTE o symlink. Sem isto escrevia-se no .env do main.
+  # `mv` e nao um redirect, e a diferenca E' o invariante: um rename SUBSTITUI o proprio
+  # link, enquanto `> "$dst"` o SEGUE e escreve no alvo — o .env do main, e portanto o
+  # dos outros 5 worktrees. Havia aqui um `rm -f "$dst"` antes do mv, com um comentario
+  # a dizer que era ele a proteger isto; um mutante que o removeu deixou os 10 testes
+  # verdes, o que provou que era redundante e que o comentario estava errado. Quem
+  # protege e' o mv. Mutar o mv para `cat > "$dst"` poe o teste vermelho — [R25].
   mv "$tmp" "$dst"
   printf '✓ .env deste worktree aponta para %s\n' "$api"
 }
@@ -201,5 +209,23 @@ case "$cmd" in
       done
     ;;
 
-  *) die "uso: supabase-worktree.sh provision|teardown|inventory" ;;
+  # Costuras para teste, e nao so': ambas sao uteis a mao quando algo corre mal.
+  # `config` escreve o config derivado SEM tocar em Docker — e' o que torna possivel
+  # testar a geracao do TOML (o bug dos backticks passava despercebido de outra forma,
+  # porque so' se manifestava quando a CLI tentava parsear o ficheiro).
+  config)
+    off="$(pick_offset)"
+    write_cfg "$off"
+    printf '%s\n' "$CFG"
+    ;;
+
+  # `rewrite-env` isolado porque o invariante que ele protege e' o mais caro de partir:
+  # o .env do worktree e' um SYMLINK para o do main, logo escrever "para dentro" dele
+  # reescreve o do main E o dos outros 5 worktrees. Um teste tem de poder exercitar
+  # isto sem levantar uma stack.
+  rewrite-env)
+    rewrite_env
+    ;;
+
+  *) die "uso: supabase-worktree.sh provision|teardown|inventory|config|rewrite-env" ;;
 esac
