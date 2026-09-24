@@ -47,9 +47,27 @@ trap 'rm -f "$tmp_bloco"' EXIT
 
 awk '
   /^export type Database = \{/ { dentro = 1; next }
-  dentro && /^  [a-zA-Z_]+: \{/ && !/__InternalSupabase/ { exit }   # comecou a 1a schema
+  dentro && /^  [a-zA-Z_][a-zA-Z0-9_]*: \{/ && !/__InternalSupabase/ { exit }   # comecou a 1a schema
   dentro                        { print }
 ' "$actual" > "$tmp_bloco"
+
+# A FORMA, nao so' "nao vazio". Todos os modos de falha deste script davam saida
+# nao-vazia, plausivel e ERRADA com exit 0 — um `actual` truncado produzia TS invalido
+# (bloco por fechar), e um schema com digito no nome fazia a extraccao fugir 30 linhas.
+# O `[ -s "$tmp2" ]` de quem chama nao apanha nenhum desses. Verifica-se aqui, no unico
+# sitio que sabe o que se esperava. Ronda 2 da revisao por pares.
+if [ -s "$tmp_bloco" ]; then
+  abre="$(grep -o '{' "$tmp_bloco" | wc -l | tr -d ' ' || true)"
+  fecha="$(grep -o '}' "$tmp_bloco" | wc -l | tr -d ' ' || true)"
+  linhas="$(wc -l < "$tmp_bloco" | tr -d ' ')"
+  if ! grep -qE '^  __InternalSupabase: \{' "$tmp_bloco" ||
+     [ "$abre" != "$fecha" ] || [ "$linhas" -gt 12 ]; then
+    printf 'aviso: bloco extraido de %s com forma inesperada (%s linhas, %s/%s chavetas); tipos passam intactos\n' \
+      "$actual" "$linhas" "$abre" "$fecha" >&2
+    cat "$novo"
+    exit 0
+  fi
+fi
 
 if [ ! -s "$tmp_bloco" ]; then
   # Nao se inventa: se a extraccao veio vazia, passa o novo tal e qual e diz-se porque.

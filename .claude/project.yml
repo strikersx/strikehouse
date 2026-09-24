@@ -10,10 +10,12 @@ tests:
   lint: "make lint"
   # Sem alvo no Makefile; tsconfig.app.json existe e tsc esta nas devDependencies.
   typecheck: "npx tsc --noEmit"
-  # ATENCAO: e2e sobe `npm run dev` em :8080, que le o .env e escreve na Supabase
-  # HOSPEDADA (cgdshqmqsqwgwpjfmesr). Ate o isolamento de BD por worktree existir,
-  # satisfaz [R11] com `receipt.sh test --scope` e a razao registada.
-  e2e: "npm run test:e2e"
+  # `make test-e2e` e NAO `npm run test:e2e`: e esta chave que o `receipt.sh` executa
+  # para produzir o recibo do [R11], e o alvo do make e que carrega o travao
+  # `exige_local`. Apontada ao npm directamente, a producao do recibo arrancava o dev
+  # server, lia o .env e escrevia na Supabase HOSPEDADA com a service-role key — o
+  # gate a furar o guarda que o proprio diff criou. Ronda 2 da revisao por pares.
+  e2e: "make test-e2e"
   # vitest filtra por padrao nu.
   scoped: "npx vitest run --config vitest.config.ts {scope}"
 

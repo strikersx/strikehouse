@@ -320,6 +320,46 @@ describe('teardown — devolver o que se tomou [R26]', () => {
   });
 });
 
+describe('teardown — ramo de FALHA', () => {
+  /** npx que RECUSA parar a stack. */
+  function stubNpxFalha(dir: string) {
+    const bin = path.join(dir, 'binfail');
+    fs.mkdirSync(bin, { recursive: true });
+    fs.writeFileSync(path.join(bin, 'npx'), '#!/usr/bin/env bash\nexit 1\n', { mode: 0o755 });
+    return bin;
+  }
+
+  it('NAO apaga o config derivado quando o stop falha', () => {
+    const main = fs.mkdtempSync(path.join(tmp, 'main-'));
+    const wt = fakeWorktree();
+    fs.writeFileSync(path.join(main, '.env'), 'X=1\n');
+    const derivado = path.join(wt, '.supabase-wt');
+    fs.mkdirSync(path.join(derivado, 'supabase'), { recursive: true });
+    fs.writeFileSync(path.join(derivado, 'supabase', 'config.toml'), 'project_id = "p"\nport = 54421\n');
+
+    // O config e' o UNICO sitio que sabe o nome da stack. Apaga-lo com o stop falhado
+    // transforma uma falha recuperavel em containers orfaos sem nome — o [R26] ao
+    // contrario. Um mutante que movia o `rm -rf` para antes do `stop` ficava VERDE nos
+    // 13 testes anteriores; este e' o teste que faltava.
+    expect(() =>
+      run(['teardown'], {
+        WORKTREE_DIR: wt, WORKTREE_MAIN: main, WORKTREE_SLUG: 'p',
+        PATH: `${stubNpxFalha(tmp)}:${process.env.PATH}`,
+      }),
+    ).toThrow();
+
+    expect(fs.existsSync(path.join(derivado, 'supabase', 'config.toml'))).toBe(true);
+  });
+
+  it('recusa apagar quando o config nao tem project_id', () => {
+    const wt = fakeWorktree();
+    fs.mkdirSync(path.join(wt, '.supabase-wt', 'supabase'), { recursive: true });
+    fs.writeFileSync(path.join(wt, '.supabase-wt', 'supabase', 'config.toml'), 'port = 54421\n');
+    expect(() => run(['teardown'], { WORKTREE_DIR: wt, WORKTREE_SLUG: 'p' })).toThrow();
+    expect(fs.existsSync(path.join(wt, '.supabase-wt'))).toBe(true);
+  });
+});
+
 describe('propriedades do proprio script', () => {
   it('gera o config com heredoc CITADO, para que nada no corpo seja executado', () => {
     // Nao e' estilo: com <<TOML nao citado, todo o corpo — comentarios incluidos — sofre
@@ -336,5 +376,18 @@ describe('propriedades do proprio script', () => {
       .filter((l) => l.includes('TOML'));
     expect(aberturas.length).toBe(1);
     expect(aberturas[0]).toContain("<<'TOML'");
+  });
+
+  it("nao usa `sed -i ''`, que e' BSD-only e parte no CI Linux", () => {
+    // O CI corre `npm run test:unit` em ubuntu-latest, e esse comando COLHE este ficheiro
+    // (verificado com `vitest list`). O GNU sed le' o argumento vazio como NOME DE
+    // FICHEIRO e sai 2 — 7 dos 13 testes falhavam em cada push. Nao estava vermelho so'
+    // porque o `npm run lint` sai 1 antes e o job morre primeiro: cobertura zero
+    // disfarcada de verde. Ronda 2 da revisao por pares.
+    const codigo = fs
+      .readFileSync(SCRIPT, 'utf8')
+      .split('\n')
+      .filter((l) => !l.trim().startsWith('#'));
+    expect(codigo.filter((l) => /sed -i ''/.test(l))).toEqual([]);
   });
 });

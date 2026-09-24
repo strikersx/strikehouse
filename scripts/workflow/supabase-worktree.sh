@@ -161,11 +161,18 @@ TOML
 
   # Substituicao posicional, depois de o texto estar escrito. O SLUG e' sanitizado a
   # entrada para [a-zA-Z0-9_-], logo nao carrega delimitadores nem barras.
-  sed -i '' \
+  # `sed -i.bak` e nao `sed -i ''`: a forma com argumento vazio e' BSD/macOS e o GNU sed
+  # le'-a como NOME DE FICHEIRO — sai 2 com "sed: can't read :". O CI corre
+  # `npm run test:unit` em ubuntu-latest e esse comando COLHE este ficheiro de teste
+  # (verificado com `vitest list`), portanto isto partia em CI. Hoje nao esta' vermelho
+  # so' porque o `npm run lint` sai 1 antes (249 erros pre-existentes) e o job morre
+  # primeiro — cobertura zero disfarcada de verde. `-i.bak` funciona nos dois.
+  sed -i.bak \
     -e "s|@SLUG@|$SLUG|" \
     -e "s|@API@|$api_p|" -e "s|@DB@|$db_p|" -e "s|@SHADOW@|$sh_p|" \
     -e "s|@STUDIO@|$st_p|" -e "s|@INBUCKET@|$in_p|" -e "s|@ANALYTICS@|$an_p|" \
     -e "s|@INSPECTOR@|$ins_p|" "$CFG"
+  rm -f "$CFG.bak"
 
   # Um webhook do Stripe chega sem JWT: com verify_jwt ligado o endpoint responde 401 e o
   # teste ve' um 401 onde esperava 200 — que foi exactamente o que aconteceu antes disto.
@@ -248,9 +255,13 @@ case "$cmd" in
       rm -rf "$DERIVED"
       # [R26]: devolver o que se tomou inclui o .env. Sem isto ele fica a apontar para uma
       # stack MORTA em 127.0.0.1, e o travao do `make db-reset` — que so' verifica se o
-      # alvo e' localhost — passa a AUTORIZAR um reset contra o nada. O plugin tambem nao
-      # o repoe: o worktree-enter salta ficheiros ignorados que ja' existem, e depois do
-      # rewrite_env este e' um ficheiro normal, nao um symlink.
+      # alvo e' localhost — passa a AUTORIZAR um reset contra o nada.
+      #
+      # Correccao a uma versao anterior deste comentario: dizia que o worktree-enter do
+      # plugin tambem nao o repoe. Nao e' bem assim — o `env_rewrite: .env` declarado no
+      # project.yml e' INERTE, porque so' e' lido dentro do ramo do `db_test`, que este
+      # projecto nao declara. Re-entrar no worktree nao estraga o .env local; mas tambem
+      # nao o repoe. Quem o tem de repor e' este teardown.
       if [ -n "$WT_MAIN" ] && [ -f "$WT_MAIN/.env" ] && [ "$WT_MAIN" != "$WT_DIR" ]; then
         rm -f "$WT_DIR/.env"
         ln -sfn "$WT_MAIN/.env" "$WT_DIR/.env"
@@ -271,11 +282,20 @@ case "$cmd" in
     # Compara com os project_id REGISTADOS nos configs derivados dos worktrees vivos, e
     # nao com WORKTREE_LIVE_SLUGS: os slugs do plugin e os deste script tem formatos
     # diferentes, e comparar formatos diferentes marcava stacks VIVAS como orfas — medido.
+    # `git worktree list` e nao um glob: a ronda 1 corrigiu o FORMATO do slug e deixou a
+    # LOCALIZACAO por corrigir. Neste repo 4 dos 7 worktrees vivem em
+    # ~/.claude-worktrees/strikehouse/ e nao em <repo>/.claude/worktrees/, logo o glob via
+    # 2 de 7 e marcava as outras 5 stacks VIVAS como orfas — o mesmo [R26] ao contrario,
+    # com outra roupa. O git sabe onde eles estao; o glob so' sabe onde eu supunha.
     live=""
-    for c in "${WT_MAIN:-$WT_DIR}"/.claude/worktrees/*/.supabase-wt/supabase/config.toml; do
+    while read -r wtdir; do
+      [ -n "$wtdir" ] || continue
+      c="$wtdir/.supabase-wt/supabase/config.toml"
       [ -f "$c" ] || continue
-      live="$live $(cfg_project_id "$c")"
-    done
+      live="$live $(cfg_project_id "$c" || true)"
+    done <<EOF
+$(git -C "$WT_DIR" worktree list --porcelain 2>/dev/null | awk '/^worktree /{print $2}' || true)
+EOF
     # `docker ps` e nao `ps -a`: um container PARADO nao e' uma stack orfa, e' uma stack
     # parada. Listar as duas juntas ensina a gente a ignorar o relatorio.
     # Mesma armadilha: sob `set -e` + `pipefail`, um `docker ps` que falha mata o
