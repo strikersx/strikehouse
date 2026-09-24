@@ -25,5 +25,9 @@ worktree:
   # .env e DERIVADO: reescrito a partir do main a cada entrada, para que um worktree
   # nao envelheca contra o pai nem escreva no .env dos outros.
   env_rewrite: .env
-  # worktree.provision fica DELIBERADAMENTE por declarar: o script de Supabase local
-  # por worktree ainda nao existe. Declara-lo agora seria apontar para um fantasma.
+  # provision NAO e' declarado de proposito, e a razao e' medida: uma stack local custa
+  # 1 492 MiB e ha' 6 worktrees abertos = 10,4 GB contra 7,65 GB na VM do Docker. Levantar
+  # uma stack a cada `worktree-enter` nao cabe. Levanta-se a pedido, com `make db-local`,
+  # so' no worktree onde se esta' mesmo a testar.
+  teardown: "bash $WORKTREE_MAIN/scripts/workflow/supabase-worktree.sh teardown"
+  inventory: "bash $WORKTREE_MAIN/scripts/workflow/supabase-worktree.sh inventory"

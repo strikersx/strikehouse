@@ -90,3 +90,9 @@ help:
 	@echo "  make db-types       - Regenerar tipos TypeScript"
 	@echo "  make db-reset       - Reset completo (migrations + seed com test users)"
 	@echo "  make clean          - Limpar cache e builds"
+
+db-local:
+	@bash scripts/workflow/supabase-worktree.sh provision
+
+db-local-stop:
+	@bash scripts/workflow/supabase-worktree.sh teardown
