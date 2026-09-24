@@ -85,7 +85,9 @@ make test-coverage    # Relatório de cobertura
 # Base de dados (Supabase)
 make db-push          # Aplicar migrações
 make db-types         # Regenerar tipos TypeScript
-make db-reset         # Reset completo da base de dados
+make db-reset         # TRUNCA tabelas e apaga auth users — recusa alvo nao-local
+make db-local         # Levantar stack Supabase LOCAL deste worktree
+make db-local-stop    # Parar essa stack e devolver o .env ao main
 
 # Deploy
 make deploy           # Build + commit + push
@@ -96,6 +98,27 @@ make clean            # Limpar cache e builds
 ```
 
 **Não usar `npm run` diretamente** - o Makefile já encapsula tudo.
+
+### ⚠️ Isolamento de base de dados por worktree
+
+Sem `make db-local`, um worktree aponta para a Supabase **hospedada** — a mesma que todos
+os outros worktrees. Até 2026-09-24 isso era sempre verdade, e `make db-reset` truncava
+produção a partir de qualquer um deles.
+
+Três alvos recusam agora correr contra um alvo não-local:
+
+| Alvo | Escape, se for mesmo isso que queres |
+|---|---|
+| `make db-reset` | `FORCE_REMOTE_RESET=1` |
+| `make test-integration` | `FORCE_REMOTE_TESTS=1` |
+| `make test-e2e` | `FORCE_REMOTE_TESTS=1` |
+
+O sinal é um só: `VITE_SUPABASE_URL` no `.env`. `make db-local` reescreve-o para
+`localhost` (partindo o symlink para o `.env` do main) e `make db-local-stop` devolve-o.
+Uma stack local custa 12 containers e ~1,5 GB, por isso levanta-se **a pedido**, não à
+entrada do worktree.
+
+Porquês e medições: `scripts/workflow/supabase-worktree.sh`.
 
 ## Architecture
 

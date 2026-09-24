@@ -27,6 +27,14 @@ set -euo pipefail
 cmd="${1:-}"
 WT_DIR="${WORKTREE_DIR:-$PWD}"
 WT_MAIN="${WORKTREE_MAIN:-}"
+# `make db-local-stop` corre SEM as WORKTREE_*, e sem o main nao se sabe para onde
+# devolver o .env. A primeira linha do `worktree list` e' sempre a arvore principal.
+# `|| true` — TERCEIRA vez que este padrao morde neste ficheiro (grep -v, supabase status,
+# agora o git). Sob `set -euo pipefail`, uma substituicao de comando que falha mata o
+# script no proprio sitio, sem mensagem. Aqui o git sai 128 fora de um repo, que e' o caso
+# normal nos testes. Regra deste ficheiro: TODA a substituicao de comando cujo fracasso
+# seja legitimo leva `|| true` e e' verificada a seguir.
+[ -n "$WT_MAIN" ] || WT_MAIN="$(git -C "$WT_DIR" worktree list 2>/dev/null | head -1 | awk '{print $1}' || true)"
 SLUG="${WORKTREE_SLUG:-$(basename "$WT_DIR")}"
 # project_id do Supabase aceita [a-zA-Z0-9_-]; um slug com barras (feat/x) parte tudo.
 SLUG="$(printf '%s' "$SLUG" | tr -c 'a-zA-Z0-9_-' '-')"
@@ -38,6 +46,21 @@ declare -a PORT_KEYS=(api db shadow studio inbucket analytics)
 declare -a PORT_BASE=(54321 54322 54320 54323 54324 54327)
 
 die() { printf '%s\n' "$*" >&2; exit 1; }
+
+# O project_id REGISTADO no config derivado — nao o slug recalculado.
+#
+# Porque existe, e custou uma revisao para aparecer: `make db-local` corre sem nenhuma
+# WORKTREE_*, logo o slug sai de `basename` (hifens). O `worktree.teardown` e' invocado
+# pelo plugin, que forma os seus slugs com `tr -c 'a-zA-Z0-9' '_'` (underscores). Os dois
+# lados calculavam nomes DIFERENTES para a mesma stack: o `supabase stop` falhava, o
+# `|| true` engolia o erro, o `rm -rf` levava o config a' frente — e ficavam 12 containers
+# e 1,5 GiB de pe' sem NADA que soubesse como os parar. Exactamente o [R26] ao contrario.
+# O config derivado e' o registo do que foi criado; e' ele que manda.
+cfg_project_id() {
+  local cfg="${1:-$CFG}"
+  [ -f "$cfg" ] || return 1
+  awk -F'"' '/^project_id *=/ {print $2; exit}' "$cfg"
+}
 
 port_free() {
   # `lsof` e' externo e pode nao resolver; o fallback em bash nao depende de PATH.
@@ -87,26 +110,39 @@ write_cfg() {
   ln -sfn "$WT_DIR/supabase/migrations" "$DERIVED/supabase/migrations"
   [ -d "$WT_DIR/supabase/functions" ] &&
     ln -sfn "$WT_DIR/supabase/functions" "$DERIVED/supabase/functions"
-  cat > "$CFG" <<TOML
+  # Heredoc CITADO (<<'TOML') e substituicao por marcadores — nao expansao do shell.
+  #
+  # A 1a versao usava <<TOML nao citado, porque precisava de $(( )) para as portas. Isso
+  # torna TODO o corpo — comentarios incluidos — sujeito a expansao: um backtick escrito
+  # num comentario fez o shell correr `supabase start` e despejar o banner inteiro para
+  # dentro do config, que morreu em "toml: invalid character at start of key". Reparei o
+  # caso e escrevi um teste para a ASSINATURA dele; a revisao por pares mostrou que um
+  # $(date) num comentario continuava a ser executado. Citar o heredoc nao deixa a classe
+  # existir, em vez de a detectar depois.
+  local api_p=$(( PORT_BASE[0] + off )) db_p=$(( PORT_BASE[1] + off )) sh_p=$(( PORT_BASE[2] + off ))
+  local st_p=$(( PORT_BASE[3] + off )) in_p=$(( PORT_BASE[4] + off )) an_p=$(( PORT_BASE[5] + off ))
+  local ins_p=$(( 8083 + off ))
+
+  cat > "$CFG" <<'TOML'
 # GERADO por supabase-worktree.sh — nao editar a mao, nao commitar.
 # O supabase/config.toml do repo fica intocado; este e' o derivado deste worktree.
-project_id = "$SLUG"
+project_id = "@SLUG@"
 
 [api]
-port = $(( PORT_BASE[0] + off ))
+port = @API@
 
 [db]
-port = $(( PORT_BASE[1] + off ))
-shadow_port = $(( PORT_BASE[2] + off ))
+port = @DB@
+shadow_port = @SHADOW@
 
 [studio]
-port = $(( PORT_BASE[3] + off ))
+port = @STUDIO@
 
 [inbucket]
-port = $(( PORT_BASE[4] + off ))
+port = @INBUCKET@
 
 [analytics]
-port = $(( PORT_BASE[5] + off ))
+port = @ANALYTICS@
 
 [edge_runtime]
 enabled = true
@@ -114,7 +150,7 @@ enabled = true
 # reload do per_worker da' problemas "in large repos or with symlinks", e functions/ ENTRA
 # aqui por symlink. Escolher o default seria escolher o caso que o aviso descreve.
 policy = "oneshot"
-inspector_port = $(( 8083 + off ))
+inspector_port = @INSPECTOR@
 
 [edge_runtime.secrets]
 # env() le' a variavel do ambiente de quem corre o supabase start — por isso o provision
@@ -122,6 +158,14 @@ inspector_port = $(( 8083 + off ))
 STRIPE_SECRET_KEY = "env(STRIPE_SECRET_KEY)"
 STRIPE_WEBHOOK_SECRET = "env(STRIPE_WEBHOOK_SECRET)"
 TOML
+
+  # Substituicao posicional, depois de o texto estar escrito. O SLUG e' sanitizado a
+  # entrada para [a-zA-Z0-9_-], logo nao carrega delimitadores nem barras.
+  sed -i '' \
+    -e "s|@SLUG@|$SLUG|" \
+    -e "s|@API@|$api_p|" -e "s|@DB@|$db_p|" -e "s|@SHADOW@|$sh_p|" \
+    -e "s|@STUDIO@|$st_p|" -e "s|@INBUCKET@|$in_p|" -e "s|@ANALYTICS@|$an_p|" \
+    -e "s|@INSPECTOR@|$ins_p|" "$CFG"
 
   # Um webhook do Stripe chega sem JWT: com verify_jwt ligado o endpoint responde 401 e o
   # teste ve' um 401 onde esperava 200 — que foi exactamente o que aconteceu antes disto.
@@ -138,11 +182,18 @@ TOML
 rewrite_env() {
   local src="${WT_MAIN:-$WT_DIR}/.env" dst="$WT_DIR/.env" tmp
   [ -f "$src" ] || die "sem .env em $src"
-  local api key svc
-  api="$(npx --no-install supabase status -o env --workdir "$DERIVED" 2>/dev/null | awk -F'=' '/^API_URL=/{print $2}' | tr -d '"')"
-  key="$(npx --no-install supabase status -o env --workdir "$DERIVED" 2>/dev/null | awk -F'=' '/^PUBLISHABLE_KEY=/{print $2}' | tr -d '"')"
-  svc="$(npx --no-install supabase status -o env --workdir "$DERIVED" 2>/dev/null | awk -F'=' '/^SERVICE_ROLE_KEY=/{print $2}' | tr -d '"')"
-  [ -n "$api" ] && [ -n "$key" ] && [ -n "$svc" ] || die "a stack nao respondeu com as chaves"
+  # UMA chamada, e o `|| true` NAO e' decoracao: `var="$(cmd)"` sob `set -e` faz o script
+  # SAIR no proprio comando quando cmd falha, portanto o `die` abaixo nunca corria e
+  # ficava-se com exit 1 e zero explicacao — com a stack em baixo, o caso mais provavel.
+  # E' o irmao do defeito do `grep -v`, apanhado pela revisao por pares.
+  local st api key svc
+  st="$(npx --no-install supabase status -o env --workdir "$DERIVED" 2>/dev/null || true)"
+  [ -n "$st" ] || die "a stack \"$SLUG\" nao respondeu a \`supabase status\` — esta' de pe'?
+  tenta: npx supabase status --workdir $DERIVED"
+  api="$(printf '%s\n' "$st" | awk -F'=' '/^API_URL=/{print $2}' | tr -d '"')"
+  key="$(printf '%s\n' "$st" | awk -F'=' '/^PUBLISHABLE_KEY=/{print $2}' | tr -d '"')"
+  svc="$(printf '%s\n' "$st" | awk -F'=' '/^SERVICE_ROLE_KEY=/{print $2}' | tr -d '"')"
+  [ -n "$api" ] && [ -n "$key" ] && [ -n "$svc" ] || die "a stack respondeu mas sem as chaves todas (api/publishable/service_role)"
 
   tmp="$(mktemp)"
   # Preserva tudo o que nao e' Supabase (STRIPE_*, GITHUB_CI_TOKEN, ...) a partir do main.
@@ -191,20 +242,55 @@ case "$cmd" in
 
   teardown)
     [ -d "$DERIVED" ] || { printf '· nada para largar (%s)\n' "$SLUG"; exit 0; }
-    npx --no-install supabase stop --project-id "$SLUG" --no-backup >/dev/null 2>&1 || true
-    rm -rf "$DERIVED"
-    printf '✓ stack "%s" parada e volumes largados\n' "$SLUG"
+    pid="$(cfg_project_id || true)"
+    [ -n "$pid" ] || die "config derivado sem project_id em $CFG — NAO apago nada as cegas, senao a stack fica orfa e sem nome"
+    if npx --no-install supabase stop --project-id "$pid" --no-backup >/dev/null 2>&1; then
+      rm -rf "$DERIVED"
+      # [R26]: devolver o que se tomou inclui o .env. Sem isto ele fica a apontar para uma
+      # stack MORTA em 127.0.0.1, e o travao do `make db-reset` — que so' verifica se o
+      # alvo e' localhost — passa a AUTORIZAR um reset contra o nada. O plugin tambem nao
+      # o repoe: o worktree-enter salta ficheiros ignorados que ja' existem, e depois do
+      # rewrite_env este e' um ficheiro normal, nao um symlink.
+      if [ -n "$WT_MAIN" ] && [ -f "$WT_MAIN/.env" ] && [ "$WT_MAIN" != "$WT_DIR" ]; then
+        rm -f "$WT_DIR/.env"
+        ln -sfn "$WT_MAIN/.env" "$WT_DIR/.env"
+        printf '✓ .env devolvido ao symlink do main\n'
+      fi
+      printf '✓ stack "%s" parada e volumes largados\n' "$pid"
+    else
+      # NAO se apaga o config quando o stop falha: e' o unico sitio que sabe o nome da
+      # stack. Apaga-lo aqui era transformar uma falha recuperavel em containers orfaos.
+      die "nao consegui parar a stack \"$pid\"; o config derivado FICA, para nao a perder de vista.
+  tenta: npx supabase stop --project-id $pid --no-backup"
+    fi
     ;;
 
   inventory)
     # Read-only. So' reporta; nunca apaga — quem apaga e' o teardown, e so' o que criou.
-    live=" ${WORKTREE_LIVE_SLUGS:-} "
-    docker ps -a --filter 'name=supabase_db_' --format '{{.Names}}' 2>/dev/null |
+    #
+    # Compara com os project_id REGISTADOS nos configs derivados dos worktrees vivos, e
+    # nao com WORKTREE_LIVE_SLUGS: os slugs do plugin e os deste script tem formatos
+    # diferentes, e comparar formatos diferentes marcava stacks VIVAS como orfas — medido.
+    live=""
+    for c in "${WT_MAIN:-$WT_DIR}"/.claude/worktrees/*/.supabase-wt/supabase/config.toml; do
+      [ -f "$c" ] || continue
+      live="$live $(cfg_project_id "$c")"
+    done
+    # `docker ps` e nao `ps -a`: um container PARADO nao e' uma stack orfa, e' uma stack
+    # parada. Listar as duas juntas ensina a gente a ignorar o relatorio.
+    # Mesma armadilha: sob `set -e` + `pipefail`, um `docker ps` que falha mata o
+    # inventario em silencio — e este e' o `worktree.inventory` que o plugin corre.
+    running="$(docker ps --filter 'name=supabase_db_' --format '{{.Names}}' 2>/dev/null || true)"
+    if ! docker info >/dev/null 2>&1; then
+      printf '  (docker em baixo — nao sei dizer o que esta de pe)\n' >&2
+      exit 0
+    fi
+    printf '%s\n' "$running" |
       sed 's/^supabase_db_//' | sort -u | while read -r s; do
         [ -n "$s" ] || continue
-        case "$live" in
+        case " $live " in
           *" $s "*) printf '  %-28s viva\n' "$s" ;;
-          *)        printf '  %-28s ORFA — supabase stop --project-id %s\n' "$s" "$s" ;;
+          *)        printf '  %-28s ORFA — npx supabase stop --project-id %s --no-backup\n' "$s" "$s" ;;
         esac
       done
     ;;

@@ -89,20 +89,43 @@ describe('config derivado', () => {
       run(['config'], { WORKTREE_DIR: wt, WORKTREE_SLUG: 'p' }).trim(),
       'utf8',
     );
-    const ports = [...cfg.matchAll(/^(?:shadow_)?port = (\d+)$/gm)].map((m) => Number(m[1]));
-    expect(ports.length).toBeGreaterThanOrEqual(6);
-    // Derivar so' o project_id nao chega: a 2a stack nascia com o nome certo e morria em
-    // "Bind for 0.0.0.0:54322 failed: port is already allocated". Medido.
-    expect(ports.every((p) => p >= 54420)).toBe(true);
+    // Bases da CLI, por seccao. Verifica-se que TODAS sao deslocadas pelo MESMO offset —
+    // nao apenas que sao "altas". Um mutante que somasse +1000 so' ao inbucket sobrevivia
+    // a um `>= 54420`, e um que esquecesse o inspector_port nem sequer era olhado, porque
+    // a regex antiga so' via `port`/`shadow_port`. Ambos apanhados pela revisao por pares.
+    const bases: Record<string, number> = {
+      api: 54321, db: 54322, shadow_port: 54320,
+      studio: 54323, inbucket: 54324, analytics: 54327,
+      inspector_port: 8083,
+    };
+    const sec = (name: string) => Number(cfg.match(new RegExp(`\\[${name}\\]\\nport = (\\d+)`))![1]);
+    const offsets = [
+      sec('api') - bases.api,
+      sec('db') - bases.db,
+      sec('studio') - bases.studio,
+      sec('inbucket') - bases.inbucket,
+      sec('analytics') - bases.analytics,
+      Number(cfg.match(/^shadow_port = (\d+)$/m)![1]) - bases.shadow_port,
+      Number(cfg.match(/^inspector_port = (\d+)$/m)![1]) - bases.inspector_port,
+    ];
+    expect(offsets.length).toBe(7);
+    expect(new Set(offsets).size).toBe(1);   // um so' offset, para todas
+    expect(offsets[0]).toBeGreaterThan(0);   // e deslocado de facto
   });
 
-  it('reutiliza o offset de um config ja' + ' existente, para nao mover as portas debaixo de um .env ja' + ' escrito', () => {
+  it('reutiliza o offset REGISTADO, em vez de reescolher um livre', () => {
     const wt = fakeWorktree();
     const env = { WORKTREE_DIR: wt, WORKTREE_SLUG: 'p' };
-    const first = fs.readFileSync(run(['config'], env).trim(), 'utf8');
-    const second = fs.readFileSync(run(['config'], env).trim(), 'utf8');
-    const apiOf = (s: string) => s.match(/\[api\]\nport = (\d+)/)![1];
-    expect(apiOf(second)).toBe(apiOf(first));
+    const cfgPath = run(['config'], env).trim();
+
+    // Planta um offset que a escolha automatica NUNCA daria (ela comeca em +100 e sobe
+    // pelo primeiro bloco livre). Comparar duas corridas seguidas nao testava nada: ambas
+    // escolhiam o mesmo bloco livre e o mutante que apagava a reutilizacao sobrevivia.
+    fs.writeFileSync(cfgPath, fs.readFileSync(cfgPath, 'utf8').replace(/^port = \d+$/m, 'port = 58321'));
+
+    const depois = fs.readFileSync(run(['config'], env).trim(), 'utf8');
+    expect(depois).toContain('port = 58321');          // api: +4000, reutilizado
+    expect(depois).toMatch(/^port = 58322$/m);         // db seguiu o mesmo offset
   });
 
   it('nao contem saida de comando injectada — o heredoc nao e' + ' citado', () => {
@@ -113,11 +136,20 @@ describe('config derivado', () => {
     );
     // O heredoc que gera isto NAO e' citado (precisa da expansao aritmetica das portas),
     // portanto um backtick ou $(...) num comentario e' EXECUTADO e a saida vai parar ao
-    // ficheiro. Aconteceu: o banner do `supabase start` entrou aqui e o TOML morreu em
-    // "invalid character at start of key". Os caracteres de desenho de caixa sao a
-    // assinatura dessa saida.
-    expect(cfg).not.toMatch(/[╭╰│├┬┴─]/);
-    expect(cfg).not.toContain('http://127.0.0.1:54321');
+    // ficheiro. Aconteceu com o banner do `supabase start`.
+    //
+    // A 1a versao deste teste procurava caracteres de desenho de caixa — a assinatura
+    // DESSE incidente, e nao a propriedade. Um `$(date)` ou `$(whoami)` num comentario
+    // passava incolume. A revisao por pares apontou-o. Agora verifica-se a FORMA: cada
+    // linha util e' `[seccao]` ou `chave = valor`. Qualquer saida de comando injectada
+    // quebra isso, venha de onde vier.
+    const mas = cfg
+      .split('\n')
+      .map((l) => l.trim())
+      .filter((l) => l && !l.startsWith('#'))
+      .filter((l) => !/^\[[a-z0-9_.-]+\]$/i.test(l))
+      .filter((l) => !/^[A-Za-z_][A-Za-z0-9_]* = .+$/.test(l));
+    expect(mas).toEqual([]);
   });
 });
 
@@ -229,5 +261,80 @@ describe('rewrite-env — o invariante caro', () => {
     run(['rewrite-env'], env);
     const out = fs.readFileSync(path.join(wt, '.env'), 'utf8');
     expect(out.match(/^VITE_SUPABASE_URL=/gm)?.length).toBe(1);
+  });
+});
+
+describe('teardown — devolver o que se tomou [R26]', () => {
+  function stubNpxOk(dir: string) {
+    const bin = path.join(dir, 'bin');
+    fs.mkdirSync(bin, { recursive: true });
+    fs.writeFileSync(path.join(bin, 'npx'), '#!/usr/bin/env bash\nexit 0\n', { mode: 0o755 });
+    return bin;
+  }
+
+  it('devolve o .env ao symlink do main', () => {
+    const main = fs.mkdtempSync(path.join(tmp, 'main-'));
+    const wt = fakeWorktree();
+    fs.writeFileSync(path.join(main, '.env'), 'VITE_SUPABASE_URL="https://remoto.supabase.co"\n');
+    // Estado a seguir a um provision: .env ja' e' ficheiro normal a apontar ao local.
+    fs.writeFileSync(path.join(wt, '.env'), 'VITE_SUPABASE_URL="http://127.0.0.1:54421"\n');
+    fs.mkdirSync(path.join(wt, '.supabase-wt', 'supabase'), { recursive: true });
+    fs.writeFileSync(path.join(wt, '.supabase-wt', 'supabase', 'config.toml'), 'project_id = "p"\nport = 54421\n');
+
+    run(['teardown'], {
+      WORKTREE_DIR: wt, WORKTREE_MAIN: main, WORKTREE_SLUG: 'p',
+      PATH: `${stubNpxOk(tmp)}:${process.env.PATH}`,
+    });
+
+    // Sem isto o .env fica a apontar para uma stack MORTA, e o travao do `make db-reset`
+    // — que so' verifica se o alvo e' localhost — passa a AUTORIZAR um reset contra o nada.
+    expect(fs.lstatSync(path.join(wt, '.env')).isSymbolicLink()).toBe(true);
+    expect(fs.readFileSync(path.join(wt, '.env'), 'utf8')).toContain('remoto.supabase.co');
+    expect(fs.existsSync(path.join(wt, '.supabase-wt'))).toBe(false);
+  });
+
+  it('usa o project_id REGISTADO, nao o slug recalculado', () => {
+    const main = fs.mkdtempSync(path.join(tmp, 'main-'));
+    const wt = fakeWorktree();
+    fs.writeFileSync(path.join(main, '.env'), 'X=1\n');
+    fs.mkdirSync(path.join(wt, '.supabase-wt', 'supabase'), { recursive: true });
+    // O config regista um id que NAO corresponde ao slug passado — e' o desencontro real:
+    // provision via `make db-local` usa hifens, o teardown do plugin usa underscores.
+    fs.writeFileSync(path.join(wt, '.supabase-wt', 'supabase', 'config.toml'), 'project_id = "com-hifens"\nport = 54421\n');
+
+    const bin = path.join(tmp, 'bin2');
+    fs.mkdirSync(bin, { recursive: true });
+    // Regista o project-id que lhe passaram, para podermos afirmar QUAL foi usado.
+    fs.writeFileSync(path.join(bin, 'npx'),
+      `#!/usr/bin/env bash\nprintf '%s\\n' "$*" >> ${JSON.stringify(path.join(tmp, 'chamadas.txt'))}\nexit 0\n`,
+      { mode: 0o755 });
+
+    run(['teardown'], {
+      WORKTREE_DIR: wt, WORKTREE_MAIN: main, WORKTREE_SLUG: 'com_underscores',
+      PATH: `${bin}:${process.env.PATH}`,
+    });
+
+    const chamadas = fs.readFileSync(path.join(tmp, 'chamadas.txt'), 'utf8');
+    expect(chamadas).toContain('--project-id com-hifens');
+    expect(chamadas).not.toContain('com_underscores');
+  });
+});
+
+describe('propriedades do proprio script', () => {
+  it('gera o config com heredoc CITADO, para que nada no corpo seja executado', () => {
+    // Nao e' estilo: com <<TOML nao citado, todo o corpo — comentarios incluidos — sofre
+    // expansao do shell. Um backtick num comentario correu `supabase start` e despejou o
+    // banner para dentro do config. Testar a saida apanha o caso multi-linha; testar ISTO
+    // nao deixa a classe nascer.
+    // So' as linhas de codigo: os comentarios deste ficheiro FALAM do `<<TOML` antigo, e
+    // uma regex solta sobre o ficheiro inteiro casava com a explicacao em vez do codigo.
+    const aberturas = fs
+      .readFileSync(SCRIPT, 'utf8')
+      .split('\n')
+      .filter((l) => !l.trim().startsWith('#'))
+      .filter((l) => l.includes('<<'))
+      .filter((l) => l.includes('TOML'));
+    expect(aberturas.length).toBe(1);
+    expect(aberturas[0]).toContain("<<'TOML'");
   });
 });
