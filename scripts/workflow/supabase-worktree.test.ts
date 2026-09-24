@@ -246,10 +246,48 @@ describe('rewrite-env — o invariante caro', () => {
     expect(out).toContain('GITHUB_CI_TOKEN="gh_Y"');
   });
 
+  it('recusa quando a stack responde mas FALTA uma chave', () => {
+    const main = fs.mkdtempSync(path.join(tmp, 'main-'));
+    const wt = fakeWorktree();
+    const mainEnv = path.join(main, '.env');
+    fs.writeFileSync(mainEnv, 'VITE_SUPABASE_URL="https://remoto.supabase.co"\n');
+    fs.symlinkSync(mainEnv, path.join(wt, '.env'));
+    const antes = fs.readFileSync(mainEnv, 'utf8');
+
+    // Responde com API_URL e mais nada. Um `.env` escrito com a service-role key VAZIA
+    // e' pior do que nenhum: o cliente falha longe daqui, com um erro de auth que nao
+    // aponta para este script. Um mutante que apagava a verificacao das tres chaves
+    // sobrevivia aos 16 testes anteriores.
+    const bin = path.join(tmp, 'bin-parcial');
+    fs.mkdirSync(bin, { recursive: true });
+    fs.writeFileSync(path.join(bin, 'npx'),
+      '#!/usr/bin/env bash\necho \'API_URL="http://127.0.0.1:54421"\'\n', { mode: 0o755 });
+
+    expect(() =>
+      run(['rewrite-env'], {
+        WORKTREE_DIR: wt, WORKTREE_MAIN: main, WORKTREE_SLUG: 'p',
+        PATH: `${bin}:${process.env.PATH}`,
+      }),
+    ).toThrow();
+
+    // E nada foi tocado: nem o do main, nem o symlink do worktree.
+    expect(fs.readFileSync(mainEnv, 'utf8')).toBe(antes);
+    expect(fs.lstatSync(path.join(wt, '.env')).isSymbolicLink()).toBe(true);
+  });
+
   it('e' + ' idempotente: correr duas vezes nao duplica as chaves', () => {
     const main = fs.mkdtempSync(path.join(tmp, 'main-'));
     const wt = fakeWorktree();
-    fs.writeFileSync(path.join(main, '.env'), 'VITE_SUPABASE_URL="https://remoto.supabase.co"\n');
+    // As TRES chaves Supabase, como o .env real tem. Com so' a URL, um mutante que
+    // reduzisse o filtro do `grep -v` a uma chave nao tinha as outras duas para duplicar
+    // e sobrevivia — o fixture e' que nao era realista, nao o codigo que estava certo.
+    fs.writeFileSync(
+      path.join(main, '.env'),
+      'VITE_SUPABASE_URL="https://remoto.supabase.co"\n' +
+        'VITE_SUPABASE_PUBLISHABLE_KEY="sb_publishable_REMOTO"\n' +
+        'SUPABASE_SERVICE_ROLE_KEY="sb_secret_REMOTO"\n' +
+        'STRIPE_SECRET_KEY="sk_test_X"\n',
+    );
     fs.symlinkSync(path.join(main, '.env'), path.join(wt, '.env'));
     const env = {
       WORKTREE_DIR: wt,
@@ -260,7 +298,12 @@ describe('rewrite-env — o invariante caro', () => {
     run(['rewrite-env'], env);
     run(['rewrite-env'], env);
     const out = fs.readFileSync(path.join(wt, '.env'), 'utf8');
-    expect(out.match(/^VITE_SUPABASE_URL=/gm)?.length).toBe(1);
+    // AS TRES, nao so' a URL: o filtro do `grep -v` cobre os tres nomes, e um mutante que
+    // o reduzisse a um deixava as outras duas DUPLICADAS — com a versao antiga a ganhar ou
+    // a perder conforme quem le' o .env. O teste antigo so' contava a URL e sobrevivia-lhe.
+    for (const chave of ['VITE_SUPABASE_URL', 'VITE_SUPABASE_PUBLISHABLE_KEY', 'SUPABASE_SERVICE_ROLE_KEY']) {
+      expect(out.match(new RegExp(`^${chave}=`, 'gm'))?.length, chave).toBe(1);
+    }
   });
 });
 
