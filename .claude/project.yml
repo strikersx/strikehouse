@@ -1,0 +1,35 @@
+# .claude/project.yml — COMMITTED. Arma os gates do development-workflow para quem clonar.
+# Valores detectados do repo (Makefile, package.json, git remote), nao inventados.
+
+github:
+  repo: strikersx/strikehouse
+
+tests:
+  # Alvos do Makefile — CLAUDE.md manda usar make, nao npm run directo.
+  unit: "make test"
+  lint: "make lint"
+  # Sem alvo no Makefile; tsconfig.app.json existe e tsc esta nas devDependencies.
+  typecheck: "npx tsc --noEmit"
+  # `make test-e2e` e NAO `npm run test:e2e`: e esta chave que o `receipt.sh` executa
+  # para produzir o recibo do [R11], e o alvo do make e que carrega o travao
+  # `exige_local`. Apontada ao npm directamente, a producao do recibo arrancava o dev
+  # server, lia o .env e escrevia na Supabase HOSPEDADA com a service-role key — o
+  # gate a furar o guarda que o proprio diff criou. Ronda 2 da revisao por pares.
+  e2e: "make test-e2e"
+  # vitest filtra por padrao nu.
+  scoped: "npx vitest run --config vitest.config.ts {scope}"
+
+worktree:
+  base: main
+  isolate: "true"
+  # Vite e Playwright estao presos a :8080; cada worktree precisa da sua porta.
+  port_base: 8080
+  # .env e DERIVADO: reescrito a partir do main a cada entrada, para que um worktree
+  # nao envelheca contra o pai nem escreva no .env dos outros.
+  env_rewrite: .env
+  # provision NAO e' declarado de proposito, e a razao e' medida: uma stack local custa
+  # 1 492 MiB e ha' 6 worktrees abertos = 10,4 GB contra 7,65 GB na VM do Docker. Levantar
+  # uma stack a cada `worktree-enter` nao cabe. Levanta-se a pedido, com `make db-local`,
+  # so' no worktree onde se esta' mesmo a testar.
+  teardown: "bash $WORKTREE_MAIN/scripts/workflow/supabase-worktree.sh teardown"
+  inventory: "bash $WORKTREE_MAIN/scripts/workflow/supabase-worktree.sh inventory"

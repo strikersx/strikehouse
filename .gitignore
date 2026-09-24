@@ -88,3 +88,9 @@ supabase/.branches
 .secrets
 secrets/
 credentials/
+
+# development-workflow: config por maquina, nunca commitada
+.claude/project.local.yml
+
+# supabase-worktree.sh: stack local derivada deste worktree
+.supabase-wt/
