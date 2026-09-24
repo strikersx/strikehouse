@@ -68,6 +68,17 @@ pick_offset() {
   die "sem bloco de portas livre entre +100 e +9000"
 }
 
+# Quais funcoes correm SEM verificacao de JWT. Lido de scripts/deploy-edge-functions.sh,
+# nao hardcodado: e' esse script que decide o que vai para producao, e duas listas
+# separadas divergem em silencio — o local passaria a testar uma politica de auth que
+# producao nao tem. [R21], o codigo e' a verdade.
+jwt_exempt_functions() {
+  local dep="$WT_DIR/scripts/deploy-edge-functions.sh"
+  [ -f "$dep" ] || return 0
+  grep -oE 'functions deploy [a-z0-9-]+ [^|]*--no-verify-jwt' "$dep" 2>/dev/null |
+    awk '{print $3}' | sort -u
+}
+
 write_cfg() {
   local off="$1"
   mkdir -p "$DERIVED/supabase"
@@ -96,7 +107,28 @@ port = $(( PORT_BASE[4] + off ))
 
 [analytics]
 port = $(( PORT_BASE[5] + off ))
+
+[edge_runtime]
+enabled = true
+# "oneshot" e nao o "per_worker" por omissao: o proprio template da CLI diz que o hot
+# reload do per_worker da' problemas "in large repos or with symlinks", e functions/ ENTRA
+# aqui por symlink. Escolher o default seria escolher o caso que o aviso descreve.
+policy = "oneshot"
+inspector_port = $(( 8083 + off ))
+
+[edge_runtime.secrets]
+# env() le' a variavel do ambiente de quem corre o supabase start — por isso o provision
+# exporta o .env antes. Os valores nunca entram neste ficheiro.
+STRIPE_SECRET_KEY = "env(STRIPE_SECRET_KEY)"
+STRIPE_WEBHOOK_SECRET = "env(STRIPE_WEBHOOK_SECRET)"
 TOML
+
+  # Um webhook do Stripe chega sem JWT: com verify_jwt ligado o endpoint responde 401 e o
+  # teste ve' um 401 onde esperava 200 — que foi exactamente o que aconteceu antes disto.
+  local fn
+  for fn in $(jwt_exempt_functions); do
+    printf '\n[functions.%s]\nverify_jwt = false\n' "$fn" >> "$CFG"
+  done
 }
 
 # O .env de um worktree e' um SYMLINK para o do main (worktree-enter liga os ignorados).
@@ -132,6 +164,18 @@ case "$cmd" in
     write_cfg "$off"
     printf '· stack "%s", portas +%s (api %s, db %s)\n' \
       "$SLUG" "$off" "$(( PORT_BASE[0] + off ))" "$(( PORT_BASE[1] + off ))"
+    # Os `env(...)` do [edge_runtime.secrets] resolvem-se contra o ambiente de QUEM corre
+    # o start. Sem isto o runtime sobe sem STRIPE_* e as funcoes falham por falta de
+    # segredo em vez de por JWT — dois erros que se parecem no teste e nao na causa.
+    # Le-se o .env do MAIN: o do worktree pode ja' ter sido reescrito para local, e os
+    # segredos do Stripe nao sao locais.
+    envsrc="${WT_MAIN:-$WT_DIR}/.env"
+    if [ -f "$envsrc" ]; then
+      set -a
+      # shellcheck disable=SC1090
+      . "$envsrc"
+      set +a
+    fi
     npx --no-install supabase start --workdir "$DERIVED" >/dev/null
     rewrite_env
     printf '✓ provisionado: %s\n' "$SLUG"
